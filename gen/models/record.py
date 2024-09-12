@@ -5,25 +5,42 @@ from collections import OrderedDict
 import os
 
 
-# This is the object model for a packed record. It extracts data from a
-# input file and stores the data as object member variables.
 class record(packed_type):
-    # Initialize the events object, ingest data, and check it by
-    # calling the base class init function.
+    """
+    This is the object model for a packed record. It extracts data from a
+    input file and stores the data as object member variables.
+    """
     def __init__(self, filename):
+        """
+        Initialize the events object, ingest data, and check it by
+        calling the base class init function.
+        """
         # Load the object from the file:
         super(record, self).__init__(
             filename, os.environ["SCHEMAPATH"] + "/record.yaml"
         )
 
-    # Load record specific data structures with information from YAML file.
     def _load(self):
+        """Load record specific data structures with information from YAML file."""
         # Initialize object members:
         self.fields = OrderedDict()
         self.variable_length_fields = OrderedDict()
         self.dynamically_sized_fields = OrderedDict()
         self.statically_sized_fields = OrderedDict()
         self.variable_length_sizing_fields = OrderedDict()
+
+        #
+        # Define the endiannesses available for this packed record. Depending
+        # on the packed record definition, the endiannesses supported are:
+        #
+        #   big    - The single packed type T is big endian
+        #   little - The single packed type T_Le is little endian
+        #   either - Two packed types exists T, big endian, and T_Le, little endian
+        #   mixed  - The single packed type has both little and big endian parts
+        #             ^ This one is not yet supported, but could be in the future.
+        #
+        self.endianness = "either"  # This is the default
+        self.nested = False
 
         # Populate the object with the contents of the
         # file data:
@@ -45,6 +62,93 @@ class record(packed_type):
             self.fields[the_field.name] = the_field
             start_bit = the_field.end_bit + 1
             self.num_fields = the_field.end_field_number
+
+            # If field is arrayed then the array components must be <= 8 bits otherwise
+            # endianness cannot be guaranteed. In this case, the user should be using a
+            # packed array to declare the field type instead.
+            if (
+                the_field.format
+                and the_field.format.length
+                and the_field.format.length > 1
+                and the_field.format.unit_size > 8
+            ):
+                raise ModelException(
+                    "Record '"
+                    + self.name
+                    + '" cannot specify field "'
+                    + the_field.name
+                    + "' of type '"
+                    + the_field.type
+                    + "' and format '"
+                    + str(the_field.format)
+                    + "'. Array components must be <=8 bits in size to guarantee endianness."
+                    + " Use a packed array to defined arrays with components >8 bits in size."
+                )
+
+            # Handle fields that are packed records or arrays themselves, ie. (nested packed records)
+            if the_field.is_packed_type:
+                self.nested = True
+
+                # Check endianness. The endianness rules are as follows:
+                #
+                #   1. A simple packed record with no nesting of other packed records/arrays will support
+                #      "either" endianness
+                #   2. A nested packed record containing fields of .T types only support "big" endian
+                #   3. A nested packed record containing fields of .T_Le types only supports "little" endian
+                #   4. Packed records can not contain both little and big endian fields (for now) or unpacked
+                #      fields.
+                #
+                if self.endianness == "either":
+                    if (
+                        the_field.type.endswith(".T")
+                        or the_field.type.endswith(".Volatile_T")
+                        or the_field.type.endswith(".Atomic_T")
+                        or the_field.type.endswith(".Register_T")
+                    ):
+                        self.endianness = "big"
+                    elif (
+                        the_field.type.endswith(".T_Le")
+                        or the_field.type.endswith(".Volatile_T_Le")
+                        or the_field.type.endswith(".Atomic_T_Le")
+                        or the_field.type.endswith(".Register_T_Le")
+                    ):
+                        self.endianness = "little"
+                    else:
+                        raise ModelException(
+                            "Record '"
+                            + self.name
+                            + '" cannot specify field "'
+                            + the_field.name
+                            + "' of type '"
+                            + the_field.type
+                            + "'. Nested packed types must either be '.*T' or '.*T_Le' types."
+                        )
+                else:
+                    if self.endianness == "big" and (
+                        the_field.type.endswith(".T")
+                        or the_field.type.endswith(".Volatile_T")
+                        or the_field.type.endswith(".Atomic_T")
+                        or the_field.type.endswith(".Register_T")
+                    ):
+                        pass  # all is good
+                    elif self.endianness == "little" and (
+                        the_field.type.endswith(".T_Le")
+                        or the_field.type.endswith(".Volatile_T_Le")
+                        or the_field.type.endswith(".Atomic_T_Le")
+                        or the_field.type.endswith(".Register_T_Le")
+                    ):
+                        pass  # all is good
+                    else:
+                        raise ModelException(
+                            "Record '"
+                            + self.name
+                            + '" cannot specify field "'
+                            + the_field.name
+                            + "' of type '"
+                            + the_field.type
+                            + "'. Nested packed types must ALL be either '.*T' or '.*T_Le' types. "
+                            + "Mixed endianness is not currently supported for packed records."
+                        )
 
             # Handle variable length fields:
             if the_field.variable_length:
@@ -86,9 +190,9 @@ class record(packed_type):
                         + str(e)
                     )
                 self.variable_length_fields[the_field.name] = the_field
-                self.variable_length_sizing_fields[
-                    the_field.variable_length
-                ] = the_field.variable_length_field
+                self.variable_length_sizing_fields[the_field.variable_length] = (
+                    the_field.variable_length_field
+                )
 
             # Handle a field that might have a variable length type:
             elif the_field.is_packed_type and the_field.type_model.variable_length:
@@ -287,17 +391,18 @@ class record(packed_type):
                 [f.type_package for f in self.fields.values() if f.type_package]
             )
         )
-        self.type_uses = list(
-            OrderedDict.fromkeys(
-                self.type_includes
-                + [
-                    f.type_package
-                    if f.is_packed_type
-                    else (f.type_package + "." + f.type_model.name)
-                    for f in complex_typed_fields
-                ]
-            )
-        )
+
+        # Create type uses list for assertion package. This is complicated, but needed.
+        type_includes_no_var = []
+        for f in self.fields.values():
+            if f.type_model and f.is_packed_type:
+                if not f.type_model.variable_length:
+                    type_includes_no_var.append(f.type_package)
+            elif f.type_model and not f.is_packed_type:
+                type_includes_no_var.append(f.type_package + "." + f.type_model.name)
+            elif f.type_package:
+                type_includes_no_var.append(f.type_package)
+        self.type_uses = list(OrderedDict.fromkeys(type_includes_no_var))
 
         # Store the includes for any complex types (those that have models).
         self.modeled_type_includes = list(
@@ -330,8 +435,8 @@ class record(packed_type):
             )
         )
 
-    # Get the model types, recursively delving into any fields that are of record type:
     def get_all_types_recursive(self):
+        """Get the model types, recursively delving into any fields that are of record type."""
         types = []
         for f in self.fields.values():
             types.append(f.type)
@@ -339,8 +444,8 @@ class record(packed_type):
                 types.extend(f.type_model.get_all_types_recursive())
         return list(OrderedDict.fromkeys(types))
 
-    # Get all type models, recursively delving into any fields that are of record type:
     def get_all_type_models_recursive(self):
+        """Get all type models, recursively delving into any fields that are of record type."""
         type_models = []
         for f in self.fields.values():
             if f.is_packed_type:
@@ -348,8 +453,8 @@ class record(packed_type):
                 type_models.extend(f.type_model.get_all_type_models_recursive())
         return list(OrderedDict.fromkeys(type_models))
 
-    # Get all enum models recursively delving into any fields that are of record type:
     def get_all_enum_models_recursive(self):
+        """Get all enum models recursively delving into any fields that are of record type."""
         enum_models = []
         for f in self.fields.values():
             if f.is_packed_type:
@@ -358,8 +463,8 @@ class record(packed_type):
                 enum_models.append(f.type_model)
         return list(OrderedDict.fromkeys(enum_models))
 
-    # Returns a flat ordered list of field objects that make up this record:
     def flatten(self):
+        """Returns a flat ordered list of field objects that make up this record."""
         from copy import copy
 
         fields = []
@@ -411,9 +516,11 @@ class record(packed_type):
                 )
         return descriptions
 
-    # Override this method so that we can also recursively load and set any type ranges for any
-    # packed types that this packed record may contain as fields.
     def load_type_ranges(self):
+        """
+        Override this method so that we can also recursively load and set any type ranges for any
+        packed types that this packed record may contain as fields.
+        """
         # Load the type ranges for any field that this record has that is also a packed
         # type.
         for f in self.fields.values():
@@ -443,16 +550,18 @@ class record(packed_type):
                     f.literals = type_range.literals
                 f.type_ranges_loaded = True
 
-    # Returns true if the packed type is always valid, meaning running
-    # 'Valid on the type will ALWAYS produce True. In other words, there
-    # is no bit representation of the type that could cause a constraint
-    # error when a range check is performed.
-    #
-    # To determine this we need to compare the type's type_range against
-    # the its bit layout (ie. format) to ensure that the maximum representable
-    # values in the format is also the maximum representable values in the
-    # type itself.
     def is_always_valid(self):
+        """
+        Returns true if the packed type is always valid, meaning running
+        'Valid on the type will ALWAYS produce True. In other words, there
+        is no bit representation of the type that could cause a constraint
+        error when a range check is performed.
+
+        To determine this we need to compare the type's type_range against
+        the its bit layout (ie. format) to ensure that the maximum representable
+        values in the format is also the maximum representable values in the
+        type itself.
+        """
         # First we need to load the type ranges for this type:
         self.load_type_ranges()
 
@@ -477,15 +586,17 @@ class record(packed_type):
                 names.append(a_field.name)
         return names
 
-    # This function will create a graph of all of the child fields of whatever data_product is calling it
-    # This function returns a dictionary in the form of:
-    # {
-    # "paths" : [[]],
-    # "graph": {}
-    # }
-    # Where "paths" is a 2D array that represents all of the paths from the graph (using the graphs keys)
-    # and graph is the graph itself (this allows jinja to access all information contained in a node)
     def create_record_graph(self):
+        """
+        This function will create a graph of all of the child fields of whatever data_product is calling it
+        This function returns a dictionary in the form of:
+        {
+        "paths" : [[]],
+        "graph": {}
+        }
+        Where "paths" is a 2D array that represents all of the paths from the graph (using the graphs keys)
+        and graph is the graph itself (this allows jinja to access all information contained in a node)
+        """
         queue = []
         # These lists exist so that we can find all of the paths in the order we care about
         starting_nodes = []
@@ -539,14 +650,14 @@ class record(packed_type):
 #####################
 
 
-# Function that returns a list of child fields from a parent
 def search_fields(a_record):
+    """Function that returns a list of child fields from a parent"""
     field_list = []
     for a_field in a_record.fields.values():
         field_list.append(a_field)
     return field_list
 
 
-# A template for an individual node in the data_product graph
 def fetch_node_template():
+    """A template for an individual node in the data_product graph"""
     return {"field": None, "children": []}

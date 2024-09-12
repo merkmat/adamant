@@ -1,10 +1,10 @@
 #
 # $ docker build -t $DOCKER_IMAGE_NAME -f Dockerfile .
 #
-# For best results use the ./build_image.sh and ./create_container.sh scripts
+# For best results use the ./adamant_env.sh script with the `build` and `start` arguments
 # provided in this directory.
 #
-FROM ubuntu:22.04 AS base
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -47,11 +47,9 @@ USER root
 RUN cat /dev/zero | ssh-keygen -q -N "" \
     && echo "vm.swappiness = 0" > /etc/sysctl.conf \
     && sudo ln -sf /usr/lib/x86_64-linux-gnu/libreadline.so.8 /usr/lib/x86_64-linux-gnu/libreadline.so.7 \
-    && DEBIAN_FRONTEND=noninteractive add-apt-repository -y ppa:linuxuprising/libpng12 \
     && apt install --reinstall -y software-properties-common \
-    && add-apt-repository ppa:linuxuprising/libpng12 \
     && DEBIAN_FRONTEND=noninteractive apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -yq socat graphviz libpng12-0 gawk xxd time psmisc python3-venv python3-dev \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -yq socat graphviz libpng-dev gawk xxd time psmisc python3-venv python3-dev \
     && DEBIAN_FRONTEND=noninteractive apt install -yq `DEBIAN_FRONTEND=noninteractive apt --assume-no install texlive-full | \
          awk '/The following additional packages will be installed/{f=1;next} /Suggested packages/{f=0} f' | \
          tr ' ' '\n' | \
@@ -65,7 +63,7 @@ RUN cat /dev/zero | ssh-keygen -q -N "" \
 
 # Install Alire:
 FROM base AS install_alire
-ENV ALIRE_VERSION="1.2.2"
+ENV ALIRE_VERSION="2.0.1"
 ENV ALIRE_FILE=alr-$ALIRE_VERSION-bin-x86_64-linux.zip
 ENV ALIRE_URL=https://github.com/alire-project/alire/releases/download/v$ALIRE_VERSION/$ALIRE_FILE
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -yq wget unzip \
@@ -100,10 +98,13 @@ COPY --from=install_libadalang /root/libadalang/libadalang_tool_builder/tools/* 
 COPY --from=install_alire /root/alire/bin/alr $BIN_DIR
 COPY --from=install_sequence_builder /root/adamant_seq/bin/* $BIN_DIR
 
+# Enable directory colors for redo tab completion:
+RUN echo "set colored-stats on" > $HOME/.inputrc
+
 # Set up .bashrc to automatically activate the Adamant environment
 RUN cp /root/.bashrc $HOME/.bashrc \
     && echo "cd $HOME && [ -f "~/adamant/env/activate" ] && source adamant/env/activate" >> $HOME/.bashrc \
     && chown -R $DOCKER_USER:$DOCKER_USER $HOME
 
-# Make sure user is root at end.
-USER root
+# Make sure user is user at end.
+USER user

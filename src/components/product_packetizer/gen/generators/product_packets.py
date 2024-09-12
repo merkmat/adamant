@@ -9,8 +9,8 @@ from util import model_loader
 from models.exceptions import ModelException
 
 
-# Helper which loads a product packet model, fully resolved by the assembly it is a part of:
 def load_product_packet_model(input_filename):
+    """Helper which loads a product packet model, fully resolved by the assembly it is a part of."""
     p = product_packets.product_packets(input_filename)
     dirname, view_name, assembly_name, *ignore = redo_arg.split_model_filename(
         p.full_filename
@@ -71,10 +71,11 @@ class product_packets_ads(product_packets_gen, generator_base):
 
 class product_packets_html(product_packets_gen, generator_base):
     def __init__(self):
+        from os import environ
         product_packets_gen.__init__(
             self,
             template_filename="name.html",
-            additional_template_dirs=["/share/adamant/gen/templates"],
+            additional_template_dirs=[environ["ADAMANT_DIR"] + os.sep + "gen" + os.sep + "templates"],
         )
 
     def generate(self, input_filename):
@@ -83,10 +84,10 @@ class product_packets_html(product_packets_gen, generator_base):
         output = p.render(self.template, template_path=self.template_dir)
 
         # Search output for html dependencies and depend on them:
-        from util import html
+        from util import html_util
 
         output_filename = self.output_filename(input_filename)
-        html.depend_on_html_links(output_filename, output)
+        html_util.depend_on_html_links(output_filename, output)
 
         # Produce the html:
         print(output)

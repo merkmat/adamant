@@ -18,11 +18,9 @@ package body Component.Stack_Monitor.Implementation is
    -- task_List : Task_Types.Task_Info_List_Access - A list of task info records to monitor.
    -- packet_Period : Interfaces.Unsigned_16 - The period (in ticks) of how often to calculate value for and send out the packet. A period of zero disables sending of the packet.
    --
-   overriding procedure Init (Self : in out Instance; Task_List : in Task_Types.Task_Info_List_Access; Packet_Period : in Interfaces.Unsigned_16 := 1) is
+   overriding procedure Init (Self : in out Instance; Task_List : in not null Task_Types.Task_Info_List_Access; Packet_Period : in Interfaces.Unsigned_16 := 1) is
       use Task_Types;
    begin
-      pragma Assert (Task_List /= null, "The task_List cannot be null.");
-
       -- Set the type variables.
       Self.Counter.Set_Period_And_Reset_Count (Packet_Period);
       Self.Tasks := Task_List;
@@ -30,7 +28,7 @@ package body Component.Stack_Monitor.Implementation is
       -- Dynamically create a list of cached indexes to speed up the calculation of the stack size. This
       -- list is the same size as the task list passed in.
       Self.Stack_Indexes := new Index_Array_Type (Task_List.all'First .. Task_List.all'Last);
-      Self.Stack_Indexes.all := (others => 0);
+      Self.Stack_Indexes.all := [others => 0];
 
       -- Set the packet length. Each data point for
       -- stack usage is a percentage that is 1 byte large. We store 2 of these per
@@ -42,7 +40,7 @@ package body Component.Stack_Monitor.Implementation is
             Sequence_Count => 0,
             Buffer_Length => 2 * Self.Tasks.all'Length
          ),
-         Buffer => (others => 0)
+         Buffer => [others => 0]
       );
    end Init;
 

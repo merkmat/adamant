@@ -1,5 +1,4 @@
 from util import ada
-from models.base import base
 import os.path
 from collections import OrderedDict
 from models.exceptions import (
@@ -7,6 +6,7 @@ from models.exceptions import (
     throw_exception_with_lineno,
     throw_exception_with_filename,
 )
+from models.assembly import assembly_submodel
 
 
 class router_table_entry(object):
@@ -45,12 +45,16 @@ class router_table_entry(object):
         )
 
 
-# This is the object model for a router table. It extracts data from a
-# input file and stores the data as object member variables.
-class ccsds_router_table(base):
-    # Initialize the table object, ingest data, and check it by
-    # calling the base class init function.
+class ccsds_router_table(assembly_submodel):
+    """
+    This is the object model for a router table. It extracts data from a
+    input file and stores the data as object member variables.
+    """
     def __init__(self, filename):
+        """
+        Initialize the table object, ingest data, and check it by
+        calling the base class init function.
+        """
         # Load the object from the file:
         this_file_dir = os.path.dirname(os.path.realpath(__file__))
         schema_dir = os.path.join(this_file_dir, ".." + os.sep + "schemas")
@@ -58,8 +62,8 @@ class ccsds_router_table(base):
             filename, schema_dir + "/ccsds_router_table.yaml"
         )
 
-    # Load command specific data structures with information from YAML file.
     def load(self):
+        """Load command specific data structures with information from YAML file."""
         # Initialize members:
         self.name = None
         self.description = None
@@ -93,9 +97,9 @@ class ccsds_router_table(base):
             else:
                 self.table[entry.apid] = entry
 
-    # Public function to resolve all of the router destinations to the correct connector indexes.
     @throw_exception_with_filename
     def resolve_router_destinations(self, assm):
+        """Public function to resolve all of the router destinations to the correct connector indexes."""
         # Verify that the ccsds router component instance that this router table is being constructed
         # for actually exists in the assembly and is a Ccsds_Router component type.
         self.ccsds_router_instance_model = assm.get_component_with_name(
@@ -119,6 +123,11 @@ class ccsds_router_table(base):
                 + self.ccsds_router_instance_model.name
                 + '".'
             )
+
+        # Add model to dependencies:
+        self.dependencies.append(
+            self.ccsds_router_instance_model.full_filename
+        )
 
         # Get the router's output connector:
         router_connector = self.ccsds_router_instance_model.connectors.of_name(
@@ -154,6 +163,11 @@ class ccsds_router_table(base):
                         connected_components[c.to_component.instance_name][
                             connector_name
                         ] = (idx + 1)
+
+                        # Add model to dependencies:
+                        self.dependencies.append(
+                            c.to_component.full_filename
+                        )
                 except KeyError:
                     # Insert the connector and index that the connector is attached to:
                     connected_components[component_name] = {connector_name: idx + 1}
@@ -226,3 +240,6 @@ class ccsds_router_table(base):
             entry.destination_indexes = [
                 e for e in OrderedDict.fromkeys(entry.destination_indexes) if e is not None
             ]
+
+        # Remove duplicate dependencies
+        self.dependencies = list(set(self.dependencies))

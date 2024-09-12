@@ -44,6 +44,8 @@ if __name__ == "__main__":
         from rules.build_clear_cache import build_clear_cache as rule_cls
     elif base == "what":
         from rules.build_what import build_what as rule_cls
+    elif base == "what_predefined":
+        from rules.build_what_predefined import build_what_predefined as rule_cls
     elif base == "prove":
         from rules.build_prove import build_prove as rule_cls
     elif base == "analyze":
@@ -80,8 +82,6 @@ if __name__ == "__main__":
         from rules.build_coverage_all import build_coverage_all as rule_cls
     elif base == "publish":
         from rules.build_publish import build_publish as rule_cls
-    elif base == "codepeer_server":
-        from rules.build_codepeer_server import build_codepeer_server as rule_cls
     elif base == "yaml_sloc":
         from rules.build_yaml_sloc import build_yaml_sloc as rule_cls
 

@@ -3,19 +3,18 @@ import os.path
 from collections import OrderedDict
 from models.exceptions import (
     ModelException,
-    throw_exception_with_lineno,
-    throw_exception_with_filename,
+    throw_exception_with_lineno
 )
 from models.packets import (
     packet,
     items_list_from_ided_entity,
     _items_from_record,
-    packet_item,
+    packet_item
 )
 from models.submodels.field import field
 from util import model_loader
 from models.submodels.ided_suite import ided_entity
-from models.base import base
+from models.assembly import assembly_submodel
 
 # Fetch the packet type size from the assembly, and save the result internally
 # in case it is asked for again.
@@ -139,9 +138,11 @@ class data_product_entry(object):
         )
 
 
-# Create a packet item that is slightly modified for the product packets from the standard
-# packet items. This provides a different full_name and flattened_description method.
 class product_packet_item(packet_item):
+    """
+    Create a packet item that is slightly modified for the product packets from the standard
+    packet items. This provides a different full_name and flattened_description method.
+    """
     def __init__(self, data, dp, packet):
         self.__dict__ = data
         self.dp = dp
@@ -262,9 +263,11 @@ class product_packet(packet):
                 self.items.update({item.full_name: item})
                 pad_count += 1
 
-    # Override this method so we can load the type ranges for the data products
-    # that make up this packet:
     def load_type_ranges(self):
+        """
+        Override this method so we can load the type ranges for the data products
+        that make up this packet:
+        """
         for dp_entry in self.data_products:
             try:
                 dp_entry.data_product.type_model.load_type_ranges()
@@ -318,12 +321,16 @@ class dummy:
     pass
 
 
-# This is the object model for a packet suite. It extracts data from a
-# input file and stores the data as object member variables.
-class product_packets(base):
-    # Initialize the packet object, ingest data, and check it by
-    # calling the base class init function.
+class product_packets(assembly_submodel):
+    """
+    This is the object model for a packet suite. It extracts data from a
+    input file and stores the data as object member variables.
+    """
     def __init__(self, filename):
+        """
+        Initialize the packet object, ingest data, and check it by
+        calling the base class init function.
+        """
         # Load the object from the file:
         this_file_dir = os.path.dirname(os.path.realpath(__file__))
         schema_dir = os.path.join(this_file_dir, ".." + os.sep + "schemas")
@@ -331,8 +338,8 @@ class product_packets(base):
             filename, schema_dir + "/product_packets.yaml"
         )
 
-    # Load command specific data structures with information from YAML file.
     def load(self):
+        """Load command specific data structures with information from YAML file."""
         # Load the base class model:
         super(product_packets, self).load()
 
@@ -496,6 +503,10 @@ class product_packets(base):
                         dp.data_product = dp.component.data_products.get_with_name(
                             dp.data_product_name
                         )
+                        self.dependencies.extend(
+                            [dp.component.data_products.full_filename] +
+                            dp.component.data_products.get_dependencies()
+                        )
 
                     # Set the size:
                     dp.size = dp.data_product.type_model.size  # in bits
@@ -523,14 +534,10 @@ class product_packets(base):
             # Set the packet size
             pkt.size = packet_size
 
-    # Public function to resolve all of the data product ids, given
-    # an assembly model.
-    @throw_exception_with_filename
-    def set_assembly(self, assembly):
-        self.assembly = assembly
+        self.dependencies = list(set(self.dependencies))
 
-    # We use the final function to create the item list and resolve the data product IDS.
     def final(self):
+        """We use the final function to create the item list and resolve the data product IDS."""
         # Resolve the data products sizes now. We cannot resolve ids yet,
         # because at the time that this function is called, the assembly has
         # not yet set the ids.

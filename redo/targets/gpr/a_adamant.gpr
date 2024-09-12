@@ -4,7 +4,7 @@ abstract project a_adamant is
    -- Adamant build system and GPRBuild.
    ADAMANT_DIR := external("ADAMANT_DIR", "");
    SOURCE_DIRS := external_as_list("SOURCE_DIRS", ",");
-   OBJECT_DIR := external("OBJECT_DIR");
+   OBJECT_DIR := external("OBJECT_DIR", "");
    EXEC_DIR := external("EXEC_DIR", "");
    CHECK_STYLE := external("CHECK_STYLE", "False");
 
@@ -38,17 +38,16 @@ abstract project a_adamant is
       --
       -- -gnatf - full errors
       -- -gnatwa - enable all warnings
-      -- -gnatwh - warn on hiding
       -- -gnatwl - elaboration pragma warnings
       -- -gnatw.o - modified but unreferenced out parameters warnings
       -- -gnatwt - deleted conditional code
       -- -gnatw.X - disable warnings for No_Exception_Propagation mode, since this is usable in Linux
-      -- -gnat2022 - use gnat2022 Ada features
+      -- -gnat2022- add support for gnat2022 features
       --
       -- Note: I did not turn on gnatwd, because writing "all" all the time makes things
       -- less readable.
       --
-      ADA_FLAGS := ("-gnatf", "-gnatwa", "-gnatwh", "-gnatwl", "-gnatw.o", "-gnatwt", "-gnatw.X");
+      ADA_FLAGS := ("-gnatf", "-gnatwa", "-gnatwl", "-gnatw.o", "-gnatwt", "-gnatw.X", "-gnat2022");
       COMMON_C_FLAGS := ("-Wall", "-Wextra", "-pedantic");
       C_FLAGS := COMMON_C_FLAGS & ("-std=gnu99");
       CPP_FLAGS := COMMON_C_FLAGS & ("-std=c++0x");
@@ -121,10 +120,13 @@ abstract project a_adamant is
    package Linker is
    end Linker;
 
-   -- CodePeer definition:
-   package CodePeer is
-      for Additional_Patterns use ADAMANT_DIR & "/redo/targets/codepeer/AdamantMessagePatterns.xml";
-      for CWE use "true";
-   end CodePeer;
+   -- GNATSAS Analyzer definition:
+   package Analyzer is
+      for Switches ("analyze") use ("--no-unused-annotate-warning");
+      for Additional_Patterns use ADAMANT_DIR & "/redo/targets/gnatsas/AdamantMessagePatterns.xml";
+   end Analyzer;
+
+   -- Source files declared empty for abstract project
+   for Source_Files use ();
 
 end a_adamant;

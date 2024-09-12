@@ -10,16 +10,18 @@ import re
 import glob
 
 
-# This command is the equivalent of turning on style checking
-# and recompiling all objects within the current directory. ie.
-#
-#  $ export CHECK_STYLE=True
-#  $ redo object_1.o object_2.o etc.
-#
-# Using "redo style" is quicker and more convenient for checking
-# that source code meets the style requirements than using the
-# environment variable directly.
 class build_style(build_rule_base):
+    """
+    This command is the equivalent of turning on style checking
+    and recompiling all objects within the current directory. ie.
+
+    $ export CHECK_STYLE=True
+    $ redo object_1.o object_2.o etc.
+
+    Using "redo style" is quicker and more convenient for checking
+    that source code meets the style requirements than using the
+    environment variable directly.
+    """
     def _build(self, redo_1, redo_2, redo_3):
         # Get targets for this directory:
         directory = os.path.abspath(os.path.dirname(redo_1))
@@ -35,14 +37,16 @@ class build_style(build_rule_base):
                 pass
 
         # Find all the objects that can be built in in this build directory, minus any assertion objects since
-        # those are not cross platform.
+        # those are not cross platform, and minus .C packages, since those don't compile for every packed type.
         assertion_obj_reg = re.compile(r".*build/obj/.*\-assertion.o$")
+        c_obj_reg = re.compile(r".*build/obj/.*\-c.o$")
         objects = [
             target
             for target in targets
             if os.path.dirname(target).startswith(build_directory)
             and target.endswith(".o")
             and not assertion_obj_reg.match(target)
+            and not c_obj_reg.match(target)
         ]
 
         # Turn on the style checking:
@@ -89,8 +93,9 @@ class build_style(build_rule_base):
         codespell_cwd = directory + os.sep + "*.*"
         codespell_ignore = os.environ["ADAMANT_DIR"] + os.sep + "redo" + os.sep + "codespell" + os.sep + "ignore_list.txt"
         codespell_output = "\" 2>&1 | tee -a " + style_log_file + " 1>&2"
-        codespell_build_dir = "*" + os.sep + "build" + os.sep + "obj,*" + os.sep + "build" + os.sep + "bin"
-        codespell_skip = " --skip=\"*" + os.sep + "alire," + codespell_build_dir + ",*.pdf,*.eps,*.svg," + style_directory
+        codespell_build_dir = "*" + os.sep + "build" + os.sep + "obj,*" + os.sep + "build" + os.sep \
+            + "bin,*" + os.sep + "build" + os.sep + "*style*"
+        codespell_skip = " --skip=\"*" + os.sep + "alire," + codespell_build_dir + ",*.pdf,*.eps,*.svg,*.ali," + style_directory
         codespell_suffix = " -I " + codespell_ignore + codespell_skip + codespell_output
         shell.run_command("codespell "
                           + codespell_cwd
@@ -99,8 +104,8 @@ class build_style(build_rule_base):
                           + build_directory
                           + codespell_suffix)
 
-        # Finally lint any YAML files:
         def _yaml_lint(filenames=[]):
+            """Finally lint any YAML files."""
             cmd = (
                 "yamllint -f parsable -c "
                 + os.environ["SCHEMAPATH"]

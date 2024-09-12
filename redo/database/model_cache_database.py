@@ -3,6 +3,7 @@ from database.database import DATABASE_MODE
 from time import time as curr_time
 from os import environ, sep
 from util import model_loader
+from database.util import get_database_file
 
 # The purpose of the model cache is to save off YAML file model load
 # data structures after they have been read from a file, validated, and
@@ -13,18 +14,29 @@ from util import model_loader
 
 
 def get_model_cache_filename():
-    cache_file = environ["ADAMANT_TMP_DIR"] + sep + "model_cache.db"
-    return cache_file
+    # Decide whether or not to use a persistent or non-persistent model cache.
+    # A persistent model cache that lasts over calls to redo is faster, but
+    # is not stable and potentially buggy. persistent model cache is disabled
+    # by default.
+    if "ENABLE_PERSISTENT_MODEL_CACHE" in environ:
+        # Model cache is persistent over calls to redo (faster):
+        cache_file = environ["ADAMANT_TMP_DIR"] + sep + "model_cache.db"
+        return cache_file
+    else:
+        # Model cache is recreated for each call to redo (safer):
+        return get_database_file("model_cache")
 
 
 class model_cache_database(database):
-    # Initialize the database:
     def __init__(self, mode=DATABASE_MODE.READ_ONLY):
+        """Initialize the database."""
         super(model_cache_database, self).__init__(get_model_cache_filename(), mode)
 
-    # Store cached version of model object along with timestamp of save and session ID
-    # for save.
     def store_model(self, model_file, model_object):
+        """
+        Store cached version of model object along with timestamp of save and session ID
+        for save.
+        """
         self.store(model_file, model_object)
         self.store(model_file + "_time@st@@", curr_time())
         self.store(model_file + "_sess@id@@", environ["ADAMANT_SESSION_ID"])
@@ -32,13 +44,15 @@ class model_cache_database(database):
             submodel_paths = model_loader._get_model_file_paths(model_object.model_name)
             self.store(model_file + "_submod@paths@@", submodel_paths)
 
-    # Update the session ID for a model. We use this to indicate that a model has been
-    # fully validated (ie. not outdated) for this redo session.
     def mark_cached_model_up_to_date_for_session(self, model_file):
+        """
+        Update the session ID for a model. We use this to indicate that a model has been
+        fully validated (ie. not outdated) for this redo session.
+        """
         self.store(model_file + "_sess@id@@", environ["ADAMANT_SESSION_ID"])
 
-    # Getters for cached model, session id of save, and time of save
     def get_model(self, model_file):
+        """Getters for cached model, session id of save, and time of save"""
         return self.try_fetch(model_file)
 
     def get_model_session_id(self, model_file):
@@ -51,9 +65,11 @@ class model_cache_database(database):
         return self.try_fetch(model_file + "_submod@paths@@")
 
 
-# Create an empty model cache database file, if one does
-# not already exist:
 def touch_model_cache_database():
+    """
+    Create an empty model cache database file, if one does
+    not already exist:
+    """
     import os.path
 
     filename = get_model_cache_filename()

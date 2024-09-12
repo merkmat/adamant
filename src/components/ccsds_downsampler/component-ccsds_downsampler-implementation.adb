@@ -51,7 +51,7 @@ package body Component.Ccsds_Downsampler.Implementation is
       use Data_Product_Types;
       Timestamp : constant Sys_Time.T := Self.Sys_Time_T_Get;
       Dp_Id : constant Data_Product_Id := Self.Data_Products.Get_Id_Base + Data_Product_Id (Tree_Index - 1) + Data_Product_Id (Ccsds_Downsampler_Data_Products.Num_Data_Products);
-      Dp : Data_Product.T := (Header => (Id => Dp_Id, Time => Timestamp, Buffer_Length => Packed_U16.Serialization.Serialized_Length), Buffer => (others => 0));
+      Dp : Data_Product.T := (Header => (Id => Dp_Id, Time => Timestamp, Buffer_Length => Packed_U16.Serialization.Serialized_Length), Buffer => [others => 0]);
    begin
       Dp.Buffer (Dp.Buffer'First .. Dp.Buffer'First + Packed_U16.Serialization.Serialized_Length - 1) := Packed_U16.Serialization.To_Byte_Array ((Value => Tree_Entry.Filter_Factor));
       Self.Data_Product_T_Send_If_Connected ((Dp));
@@ -81,10 +81,9 @@ package body Component.Ccsds_Downsampler.Implementation is
    -- Init Parameters:
    -- Downsample_List : Ccsds_Downsampler_Types.Ccsds_Downsample_Packet_List_Access - The list of APIDs that are to be downsampled and the initial filter factor associated with those APIDs.
    --
-   overriding procedure Init (Self : in out Instance; Downsample_List : in Ccsds_Downsampler_Types.Ccsds_Downsample_Packet_List_Access) is
+   overriding procedure Init (Self : in out Instance; Downsample_List : in not null Ccsds_Downsampler_Types.Ccsds_Downsample_Packet_List_Access) is
    begin
-      -- Make sure that we have an initial list and that its not null
-      pragma Assert (Downsample_List /= null, "Downsampler init list cannot be null.");
+      -- Make sure that we have an non-empty initial list
       pragma Assert (Downsample_List'Length /= 0, "Downsampler init list cannot be empty.");
       -- For each item in the list, add the apid and filter factor to the internal tree
       Self.Apid_Entries.Init (Downsample_List);

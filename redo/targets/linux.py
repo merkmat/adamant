@@ -20,10 +20,10 @@ class Linux_Base(gprbuild_target_base):
 #
 
 
-# This is the standard debug Linux target.
 class Linux_Debug(Linux_Base):
+    """This is the standard debug Linux target."""
     def description(self):
-        return ("This native 64-bit Linux target has no optimization, compiles with debug flags"
+        return ("This native 64-bit Linux target has no optimization, compiles with debug flags "
                 "enabled, and enforces the Ravenscar profile.")
 
     def gpr_project_file(self):
@@ -33,16 +33,16 @@ class Linux_Debug(Linux_Base):
         )
 
 
-# This is the default Linux target.
 class Linux(Linux_Debug):
+    """This is the default Linux target."""
     def description(self):
         return "The default Linux target. This is simply a rename of Linux_Debug."
 
 
-# Test target which links in aunit:
 class Linux_Test(Linux_Base):
+    """Test target which links in aunit."""
     def description(self):
-        return ("Same as Linux_Debug except it does not enforce the Ravenscar profile and links"
+        return ("Same as Linux_Debug except it does not enforce the Ravenscar profile and links "
                 "with AUnit.")
 
     def gpr_project_file(self):
@@ -52,10 +52,10 @@ class Linux_Test(Linux_Base):
         )
 
 
-# Coverage target which works with gcov:
 class Linux_Coverage(Linux_Base):
+    """Coverage target which works with gcov."""
     def description(self):
-        return ("Same as Linux_Test except it adds compilation flags to assist with coverage analysis"
+        return ("Same as Linux_Test except it adds compilation flags to assist with coverage analysis "
                 "via gcov.")
 
     def path_files(self):
@@ -74,7 +74,25 @@ class Linux_Coverage(Linux_Base):
         )
 
 
-# This is the target used with GNATprove to verify SPARK code.
 class Linux_Prove(Linux_Debug):
+    """This is the target used with GNATprove to verify SPARK code."""
     def description(self):
         return "This target is used to generate the path for calls to GNATprove to analyze SPARK code."
+
+
+class Linux_Analyze(Linux_Base):
+    """Analyze target which runs GNAT SAS in deep mode."""
+    def description(self):
+        return ("Same as Linux_Debug except it adds deep mode switch for GNAT SAS.")
+
+    def gpr_project_file(self):
+        return os.path.join(
+            os.environ["ADAMANT_DIR"],
+            "redo"
+            + os.sep
+            + "targets"
+            + os.sep
+            + "gpr"
+            + os.sep
+            + "linux_analyze.gpr",
+        )

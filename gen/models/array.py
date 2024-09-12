@@ -4,19 +4,35 @@ import os
 from collections import OrderedDict
 
 
-# This is the object model for a packed array. It extracts data from a
-# input file and stores the data as object member variables.
 class array(type):
-    # Initialize the packed array object, ingest data, and check it by
-    # calling the base class init function.
+    """
+    This is the object model for a packed array. It extracts data from a
+    input file and stores the data as object member variables.
+    """
     def __init__(self, filename):
+        """
+        Initialize the packed array object, ingest data, and check it by
+        calling the base class init function.
+        """
         # Load the object from the file:
         super(array, self).__init__(filename, os.environ["SCHEMAPATH"] + "/array.yaml")
 
-    # Load record specific data structures with information from YAML file.
     def _load(self):
+        """Load record specific data structures with information from YAML file."""
         # Initialize object members:
         self.length = None
+
+        # Define the endiannesses available for this packed record. Depending
+        # on the packed record definition, the endiannesses supported are:
+        #
+        #   big    - The single packed type T is big endian
+        #   little - The single packed type T_Le is little endian
+        #   either - Two packed types exists T, big endian, and T_Le, little endian
+        #   mixed  - The single packed type has both little and big endian parts
+        #             ^ This one is not yet supported, but could be in the future.
+        #
+        self.endianness = "either"  # This is the default
+        self.nested = False
 
         # Call base class load:
         super(array, self)._load()
@@ -24,9 +40,57 @@ class array(type):
         # Extract length and set appropriate fields:
         self.length = self.data["length"]
 
+        # If element is arrayed then the array components must be <= 8 bits otherwise
+        # endianness cannot be guaranteed. In this case, the user should be using a
+        # packed array to declare the field type instead.
+        if (
+            self.element.format
+            and self.element.format.length
+            and self.element.format.length > 1
+            and self.element.format.unit_size > 8
+        ):
+            raise ModelException(
+                "Array '"
+                + self.name
+                + '" cannot specify component "'
+                + self.element.name
+                + "' of type '"
+                + self.element.type
+                + "' and format '"
+                + str(self.element.format)
+                + "'. Components of array type must be <=8 bits in size to guarantee endianness."
+                + " Use a packed array to defined arrays with components >8 bits in size."
+            )
+
         # Calculate the number of fields in the array:
         if self.element.is_packed_type:
             self.num_fields = self.element.type_model.num_fields * self.length
+            self.nested = True
+
+            if (
+                self.element.type.endswith(".T")
+                or self.element.type.endswith(".Volatile_T")
+                or self.element.type.endswith(".Atomic_T")
+                or self.element.type.endswith(".Register_T")
+            ):
+                self.endianness = "big"
+            elif (
+                self.element.type.endswith(".T_Le")
+                or self.element.type.endswith(".Volatile_T_Le")
+                or self.element.type.endswith(".Atomic_T_Le")
+                or self.element.type.endswith(".Register_T_Le")
+            ):
+                self.endianness = "little"
+            else:
+                raise ModelException(
+                    "Array '"
+                    + self.name
+                    + '" cannot specify element "'
+                    + self.element.name
+                    + "' of type '"
+                    + self.element.type
+                    + "'. Nested packed types must either be '.*T' or '.*T_Le' types."
+                )
         else:
             self.num_fields = self.length
 
@@ -49,7 +113,7 @@ class array(type):
             raise ModelException(
                 "Packed array '"
                 + self.name
-                + "' cannot specify variable length element. Packed arrays must have " +
+                + "' cannot specify variable length element. Packed arrays must have "
                 + "statically sized elements."
             )
 
@@ -80,8 +144,8 @@ class array(type):
         if self.is_atomic_type:
             self.volatile_descriptor = "Atomic"
 
-    # Returns a flat ordered list of field objects that make up this array:
     def flatten(self):
+        """Returns a flat ordered list of field objects that make up this array."""
         fields = []
         for a_field in self.fields.values():
             if a_field.is_packed_type:
@@ -150,16 +214,18 @@ class array(type):
                 self.element.literals = type_range.literals
             self.element.type_ranges_loaded = True
 
-    # Returns true if the packed type is always valid, meaning running
-    # 'Valid on the element type will ALWAYS produce True. In other words, there
-    # is no bit representation of the type that could cause a constraint
-    # error when a range check is performed.
-    #
-    # To determine this we need to compare the type's type_range against
-    # the its bit layout (ie. format) to ensure that the maximum representable
-    # values in the format is also the maximum representable values in the
-    # type itself.
     def is_always_valid(self):
+        """
+        Returns true if the packed type is always valid, meaning running
+        'Valid on the element type will ALWAYS produce True. In other words, there
+        is no bit representation of the type that could cause a constraint
+        error when a range check is performed.
+
+        To determine this we need to compare the type's type_range against
+        the its bit layout (ie. format) to ensure that the maximum representable
+        values in the format is also the maximum representable values in the
+        type itself.
+        """
         # First we need to load the type ranges for this type:
         self.load_type_ranges()
         return self.element.is_always_valid()

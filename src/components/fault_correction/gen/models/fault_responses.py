@@ -1,4 +1,3 @@
-from models.base import base
 from util import ada
 import os.path
 from util import model_loader
@@ -8,6 +7,7 @@ from models.exceptions import (
     throw_exception_with_filename,
 )
 from collections import OrderedDict
+from models.assembly import assembly_submodel
 
 # Fetch the data product type buffer size and save the result internally
 # in case it is asked for again.
@@ -30,8 +30,6 @@ def _get_data_product_buffer_size():
 
 
 class fault_response(object):
-    # To initialize the component object, connector data must be
-    # passed in.
     def __init__(
         self,
         fault_name,
@@ -41,6 +39,10 @@ class fault_response(object):
         command_arg=None,
         description=None,
     ):
+        """
+        To initialize the component object, connector data must be
+        passed in.
+        """
         # Store the fault name:
         self.full_fault_name = ada.formatType(fault_name)
         self.full_fault_name_str = self.full_fault_name.replace(".", "_")
@@ -107,12 +109,16 @@ class fault_response(object):
         )
 
 
-# This is the object model for a fault response set. It extracts data from a
-# input file and stores the data as object member variables.
-class fault_responses(base):
-    # Initialize the packet object, ingest data, and check it by
-    # calling the base class init function.
+class fault_responses(assembly_submodel):
+    """
+    This is the object model for a fault response set. It extracts data from a
+    input file and stores the data as object member variables.
+    """
     def __init__(self, filename):
+        """
+        Initialize the packet object, ingest data, and check it by
+        calling the base class init function.
+        """
         # Load the object from the file:
         this_file_dir = os.path.dirname(os.path.realpath(__file__))
         schema_dir = os.path.join(this_file_dir, ".." + os.sep + "schemas")
@@ -120,8 +126,8 @@ class fault_responses(base):
             filename, schema_dir + "/fault_responses.yaml"
         )
 
-    # Load command specific data structures with information from YAML file.
     def load(self):
+        """Load command specific data structures with information from YAML file."""
         # Load the base class model:
         super(fault_responses, self).load()
 
@@ -161,9 +167,9 @@ class fault_responses(base):
                 + " bytes)."
             )
 
-    # Public function to resolve all of the fault and command IDs to their correct values from the names.
     @throw_exception_with_filename
     def resolve_fault_and_command_ids(self, assm):
+        """Public function to resolve all of the fault and command IDs to their correct values from the names."""
         self.has_command_args = False
         # Go through all the responses and resolve fault and command IDs:
         for response in self.responses:
@@ -205,6 +211,12 @@ class fault_responses(base):
                 response.fault_name
             )
             response.fault_id = response.fault.id
+
+            # Add fault model to dependencies:
+            self.dependencies.extend(
+                [response.fault_component.faults.full_filename] +
+                response.fault_component.faults.get_dependencies()
+            )
 
             # OK seconds things second. Let's resolve the command ID:
             try:
@@ -252,5 +264,12 @@ class fault_responses(base):
                 self.includes.append(response.command_arg_type_model.name)
                 self.has_command_args = True
 
+            # Add command model to dependencies:
+            self.dependencies.extend(
+                [response.command_component.commands.full_filename] +
+                response.command_component.commands.get_dependencies()
+            )
+
         # Uniquify includes:
         self.includes = list(OrderedDict.fromkeys(self.includes))
+        self.dependencies = list(set(self.dependencies))

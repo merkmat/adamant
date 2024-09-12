@@ -32,17 +32,17 @@ class {{ name }}(PackedTypeBase):
             assert isinstance(elements, list), \
                 "Expected type for elements to be 'list' and instead found '" + str(type(elements))
             assert len(elements) == self.length, \
-                ("Expected length of element array to be '" + str(self.length) + "'"
+                ("Expected length of element array to be '" + str(self.length) + "' "
                  "but instead found length of: " + str(len(elements)))
             for e in elements:
                 if e is not None:
 {% if element.is_packed_type %}
                     assert isinstance(e, {{ element.type_package }}), \
-                        ("Expected type for elements to be '{{ element.type_package }}'"
+                        ("Expected type for elements to be '{{ element.type_package }}' "
                          "and instead found '" + str(type(e)))
 {% elif element.is_enum %}
                     assert isinstance(e, {{ element.type_model.name }}), \
-                        ("Expected type for elements to be '{{ element.type_model.name }}'"
+                        ("Expected type for elements to be '{{ element.type_model.name }}' "
                          "and instead found '" + str(type(e)))
 {% else %}
 {% if element.format %}
@@ -50,11 +50,11 @@ class {{ name }}(PackedTypeBase):
                     assert isinstance(e, list), \
                         "Expected type for elements to be 'list' and instead found '" + str(type(e))
                     assert len(e) == {{ element.format.length }}, \
-                        ("Expected length of list for elements to be '{{ element.format.length }}'"
+                        ("Expected length of list for elements to be '{{ element.format.length }}' "
                          "but instead found a list of length '" + str(len(e)) + "'.")
 {% else %}
                     assert isinstance(e, {{ element.format.get_python_type_string() }}), \
-                        ("Expected type for elements to be '{{ element.format.get_python_type_string() }}'"
+                        ("Expected type for elements to be '{{ element.format.get_python_type_string() }}' "
                          "and instead found '" + str(type(e)))
 {% if element.format.type[0] == "U" %}
                     assert e >= 0, \
@@ -87,9 +87,11 @@ class {{ name }}(PackedTypeBase):
     def serialized_length(self):  # in bytes
         return self._size_in_bytes
 
-    # Special __eq__ function when you only want to compare a certain number of elements in the array
-    # not every element in the array.
     def is_equal(self, other, num_elements_to_compare=None):
+        """
+        Special __eq__ function when you only want to compare a certain number of elements in the array
+        not every element in the array.
+        """
         if num_elements_to_compare is None:
             num_elements_to_compare = self.length
         return isinstance(other, self.__class__) and \
@@ -133,22 +135,21 @@ class {{ name }}(PackedTypeBase):
 
     def to_string(self, prefix=""):
         strn = prefix + self.to_byte_string() + "\n"
-        strn += prefix + "{{ name }} : array {{ element.type }}[0:{{ length - 1 }}] = \n"
+        strn += prefix + "{{ name }} : array {{ element.type }} [0:{{ length - 1 }}] => [\n"
         for e in self.elements:
 {% if element.type_model %}
             strn += prefix + "    " + ((e.to_tuple_string()) if e is not None else str(None)) + "\n"
 {% else %}
             strn += prefix + "    " + str(e) + "\n"
 {% endif %}
-        return strn[:-1]
+        return strn + prefix + "]"
 
     def to_tuple_string(self):
-        strn = "("
-        strn += "{{ name }} = ("
+        strn = "["
         for e in self.elements:
 {% if element.type_model %}
             strn += (e.to_tuple_string() if e is not None else str(None)) + ", "
 {% else %}
             strn += str(e) + ", "
 {% endif %}
-        return strn[:-2] + "))"
+        return strn[:-2] + "]"

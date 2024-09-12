@@ -6,17 +6,19 @@ from os import environ
 profiler = None
 
 
-# This modules provides some performance enhancement to .do files:
 def optimize_path():
+    """
+    This module provides some performance enhancement to .do files:
+    """
     def _optimize_path():
         # Reorder sys.path for optimal import times:
         system_paths = []
         env_paths = []
         other_paths = []
         for p in sys.path:
-            if not (p.startswith("/share") or p.startswith("/home")):
+            if not p.startswith("/home"):
                 system_paths.append(p)
-            elif "env/python" in p:
+            elif ".py_env" in p:
                 env_paths.append(p)
             else:
                 other_paths.append(p)
@@ -44,9 +46,11 @@ def optimize_path():
         profiler.enable()
 
 
-# Python exit without garbage collection. This is a small performance
-# enhancement.
 def exit(redo_2):
+    """
+    Python exit without garbage collection. This is a small performance
+    enhancement.
+    """
     # Turn off the build system profiler if we are in that mode:
     if "PROFILE_ADAMANT_BUILD" in environ:
         # Stop profiling

@@ -6,7 +6,7 @@ package body Seq is
 
    procedure Initialize (Self : in out Engine; Stack_Depth : in Stack_Depth_Type; Engine_Id : in Sequence_Engine_Id) is
    begin
-      pragma Assert (Stack_Depth < 255, "Codepeer points out that 255 can break things.");
+      pragma Assert (Stack_Depth < 255, "GNAT SAS points out that 255 can break things.");
       Self.Stack := new Seq_Array (Max_Seq_Num'First .. Max_Seq_Num'First + Stack_Depth - 1);
       Self.Initialized := True;
       Self.Engine_Id := Engine_Id;
@@ -188,7 +188,7 @@ package body Seq is
 
       -- Reset some important state:
       Self.Current := Max_Seq_Num'First;
-      Self.Arguments := (others => (Value => (others => 0)));
+      Self.Arguments := [others => (Value => [others => 0])];
       Self.Last_Command_Id := 0;
       Self.Reserved_Sequence_Id := Sequence_Types.Sequence_Id'First;
       Self.Last_Execute_State := Seq_Execute_State.Unloaded;
@@ -221,7 +221,7 @@ package body Seq is
 
       -- Load the new sequence
       Self.Stack.all (Self.Current).Give_Arguments (Self.Arguments);
-      Self.Arguments := (others => (Value => (others => 0))); -- Reset engine argument buffer
+      Self.Arguments := [others => (Value => [others => 0])]; -- Reset engine argument buffer
 
       -- Load the sequence
       Load_State := Self.Stack.all (Self.Current).Load_New_Sequence (Sequence_Region);

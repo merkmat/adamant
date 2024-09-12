@@ -269,6 +269,19 @@ package Component.{{ name }} is
    -- been updated.
    not overriding procedure Update_Parameters_Action (Self : in out Base_Instance) is abstract;
 
+   -- This function is called when the parameter operation type is "Validate". The default implementation of this
+   -- subprogram in the implementation package is a function that returns "Valid". However, this function can, and should be
+   -- overridden if something special needs to happen to further validate a parameter. Examples of this might be validation of
+   -- certain parameters beyond individual type ranges, or performing other special functionality that only needs to be
+   -- performed after parameters have been validated. Note that range checking is performed during staging, and does not need
+   -- to be implemented here.
+   not overriding function Validate_Parameters (
+      Self : in out Base_Instance;
+{% for par in parameters %}
+      {{ par.name }} : in {% if par.type_package %}{{ par.type_package }}.U{% else %}{{ par.type }}{% endif %}{{ ";" if not loop.last }}
+{% endfor %}
+   ) return Parameter_Validation_Status.E is abstract;
+
 {% endif %}
 {% if data_dependencies %}
    -----------------------------------------------
@@ -424,12 +437,12 @@ private
    -- Procedure lookup table for dispatching to correct connector handler:
    type Dispatch_Procedure is not null access procedure (Self : in out Base_Instance;{% if connectors.arrayed_invokee() %} Index : in Connector_Index_Type;{% endif %} Bytes : in Basic_Types.Byte_Array);
    type Dispatch_Table_T is array (Connector_Identifier_Enum) of Dispatch_Procedure;
-   Dispatch_Table : constant Dispatch_Table_T := (
+   Dispatch_Table : constant Dispatch_Table_T := [
       Quit =>   Dispatch_Quit'Access,
 {% for connector in connectors.of_kind('recv_async') %}
       {{ connector.name }} => Dispatch_{{ connector.name }}'Access{{ "," if not loop.last }}
 {% endfor %}
-   );
+   ];
 
    ---------------------------------------
    -- Private methods for a component queue
@@ -546,11 +559,11 @@ private
    -- Procedure lookup table for dispatching to correct command handler:
    type Execute_Function is not null access function (Self : in out Base_Instance; Cmd : in Command.T) return Command_Response_Status.E;
    type Command_Table_T is array ({{ commands.name }}.Local_Command_Id_Type) of Execute_Function;
-   Command_Id_Table : constant Command_Table_T := (
+   Command_Id_Table : constant Command_Table_T := [
 {% for command in commands %}
       {{ commands.name }}.{{ command.name }}_Id => Execute_{{ command.name }}'Access{{ "," if not loop.last }}
 {% endfor %}
-   );
+   ];
 
 {% endif %}
 {% if parameters %}
@@ -585,20 +598,20 @@ private
    -- Procedure lookup table for dispatching to parameter stage handler:
    type Stage_Function is not null access function (Self : in out Base_Instance; Par : in Parameter.T) return Parameter_Update_Status.E;
    type Parameter_Table_T is array ({{ parameters.name }}.Local_Parameter_Id_Type) of Stage_Function;
-   Parameter_Id_Table : constant Parameter_Table_T := (
+   Parameter_Id_Table : constant Parameter_Table_T := [
 {% for par in parameters %}
       {{ parameters.name }}.{{ par.name }}_Id => Stage_{{ par.name }}'Access{{ "," if not loop.last }}
 {% endfor %}
-   );
+   ];
 
    -- Procedure lookup table for dispatching to parameter fetch handler:
    type Fetch_Function is not null access function (Self : in out Base_Instance; Par : in out Parameter.T) return Parameter_Update_Status.E;
    type Parameter_Fetch_Table_T is array ({{ parameters.name }}.Local_Parameter_Id_Type) of Fetch_Function;
-   Parameter_Id_Fetch_Table : constant Parameter_Fetch_Table_T := (
+   Parameter_Id_Fetch_Table : constant Parameter_Fetch_Table_T := [
 {% for par in parameters %}
       {{ parameters.name }}.{{ par.name }}_Id => Fetch_{{ par.name }}'Access{{ "," if not loop.last }}
 {% endfor %}
-   );
+   ];
 
    -- A protected object is used to store the component's staged parameters. This is because
    -- the staged parameters are accessed by both the execution thread of the component and the

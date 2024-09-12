@@ -20,10 +20,8 @@ package body Component.Parameter_Store.Implementation is
    -- bytes : Basic_Types.Byte_Array_Access - A pointer to an allocation of bytes to be used for storing the parameter table. The size of this byte array MUST be the exact size of the parameter table to be stored, or updating or fetch the table will be rejected with a length error.
    -- dump_Parameters_On_Change : Boolean - If set to True, the component will dump the current parameter values any time a memory region is received to change the parameter table. If set to False, parameters will only be dumped when requested by command.
    --
-   overriding procedure Init (Self : in out Instance; Bytes : in Basic_Types.Byte_Array_Access; Dump_Parameters_On_Change : in Boolean := False) is
-      use Basic_Types;
+   overriding procedure Init (Self : in out Instance; Bytes : in not null Basic_Types.Byte_Array_Access; Dump_Parameters_On_Change : in Boolean := False) is
    begin
-      pragma Assert (Bytes /= null, "Bytes must not be null!");
       -- The implementation of this component assumes that the parameter store fits cleanly in a maximum sized packet.
       pragma Assert (Bytes.all'Length + Crc_16.Crc_16_Type'Length <= Packet_Types.Packet_Buffer_Type'Length, "The parameter table must not be larger than the maximum size packet!");
       Self.Bytes := Bytes;
@@ -149,6 +147,12 @@ package body Component.Parameter_Store.Implementation is
                   Byte_Array_Pointer.Copy_To (Ptr, Self.Bytes.all);
                   -- Send info event:
                   Self.Event_T_Send_If_Connected (Self.Events.Parameter_Table_Fetched (Self.Sys_Time_T_Get, Arg.Region));
+               when Validate =>
+                  -- This component does not perform component-specific validation, so table validation is unsupported:
+                  -- Throw event:
+                  Self.Event_T_Send_If_Connected (Self.Events.Table_Validation_Not_Supported (Self.Sys_Time_T_Get, Arg.Region));
+                  -- Set the return status:
+                  To_Return := (Region => Arg.Region, Status => Parameter_Error);
             end case;
          end;
       end if;

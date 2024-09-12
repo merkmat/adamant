@@ -60,12 +60,16 @@ class parameter_table_entry(object):
         self.component_id = None
 
 
-# This is the object model for a parameter table. It extracts data from a
-# input file and stores the data as object member variables.
 class parameter_table(assembly_submodel):
-    # Initialize the packet object, ingest data, and check it by
-    # calling the base class init function.
+    """
+    This is the object model for a parameter table. It extracts data from a
+    input file and stores the data as object member variables.
+    """
     def __init__(self, filename):
+        """
+        Initialize the packet object, ingest data, and check it by
+        calling the base class init function.
+        """
         # Load the object from the file:
         this_file_dir = os.path.dirname(os.path.realpath(__file__))
         schema_dir = os.path.join(this_file_dir, ".." + os.sep + "schemas")
@@ -73,8 +77,8 @@ class parameter_table(assembly_submodel):
             filename, schema_dir + "/parameter_table.yaml"
         )
 
-    # Load command specific data structures with information from YAML file.
     def load(self):
+        """Load command specific data structures with information from YAML file."""
         # Load the base class model:
         super(parameter_table, self).load()
 
@@ -82,6 +86,7 @@ class parameter_table(assembly_submodel):
         self.name = None
         self.description = None
         self.parameter_name_list = []
+        self.parameter_table_resolved = False
         self.parameters = OrderedDict()  # map from name to packet obj
         self.components = (
             OrderedDict()
@@ -103,6 +108,9 @@ class parameter_table(assembly_submodel):
         self.parameter_name_list = self.data["parameters"]
 
     def _resolve_parameter_table(self):
+        if self.parameter_table_resolved:
+            return
+        self.parameter_table_resolved = True
         # The assembly should be loaded first:
         assert (
             self.assembly
@@ -176,6 +184,12 @@ class parameter_table(assembly_submodel):
                     # Store table entry in dictionary:
                     store_parameter_table_entry(table_entry)
 
+                # Update dependencies
+                self.dependencies.extend(
+                    [comp.parameters.full_filename] +
+                    comp.parameters.get_dependencies()
+                )
+
             elif len(split_name) == 2:
                 # This specifies both component name and parameter name. First load the component:
                 component_name = split_name[0]
@@ -205,6 +219,12 @@ class parameter_table(assembly_submodel):
 
                 # Store table entry in dictionary:
                 store_parameter_table_entry(table_entry)
+
+                # Update dependencies
+                self.dependencies.extend(
+                    [comp.parameters.full_filename] +
+                    comp.parameters.get_dependencies()
+                )
 
             else:
                 raise ModelException(
@@ -305,10 +325,15 @@ class parameter_table(assembly_submodel):
         for table_entry in self.parameters.values():
             table_entry.component_id = destinations[table_entry.component_name][0]
 
-    # Public function to resolve all of the parameter ids, given
-    # an assembly model.
+        # Remove duplicate dependencies
+        self.dependencies = list(set(self.dependencies))
+
     @throw_exception_with_filename
     def set_assembly(self, assembly):
+        """
+        Public function to resolve all of the parameter ids, given
+        an assembly model.
+        """
         # Make sure an assembly is set by the base class implementation.
         super(parameter_table, self).set_assembly(assembly)
 

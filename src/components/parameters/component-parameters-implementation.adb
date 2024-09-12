@@ -21,16 +21,13 @@ package body Component.Parameters.Implementation is
    -- parameter_Entries : Parameters_Component_Types.Parameter_Entry_List_Access - A pointer to an autocoded list of parameter entries. This table tells the parameter manager how the parameters are laid out in memory, so that it knows how to construct parameter types to update downstream components.
    -- dump_Parameters_On_Change : Boolean - If set to True, the component will dump the current parameter values any time a command or memory region is received to alter one or more parameter values. If set to False, parameters will only be dumped when requested by command.
    --
-   overriding procedure Init (Self : in out Instance; Parameter_Table_Entries : in Parameters_Component_Types.Parameter_Table_Entry_List_Access; Dump_Parameters_On_Change : in Boolean := False) is
+   overriding procedure Init (Self : in out Instance; Parameter_Table_Entries : in not null Parameters_Component_Types.Parameter_Table_Entry_List_Access; Dump_Parameters_On_Change : in Boolean := False) is
       use Parameter_Types;
       use Parameters_Component_Types;
       Current_Byte : Natural := 0;
    begin
       -- Initialize internal variables:
       Self.Dump_Parameters_On_Change := Dump_Parameters_On_Change;
-
-      -- Make sure the parameter entries is a valid access type. We can't do anything without this:
-      pragma Assert (Parameter_Table_Entries /= null, "parameter_Table_Entries must not be null!");
       Self.Entries := Parameter_Table_Entries;
 
       --
@@ -100,7 +97,7 @@ package body Component.Parameters.Implementation is
             Param_Update : Parameter_Update.T := (
                Operation => Fetch,
                Status => Success,
-               Param => (Header => (Id => Param_Entry.Id, Buffer_Length => 0), Buffer => (others => 0)
+               Param => (Header => (Id => Param_Entry.Id, Buffer_Length => 0), Buffer => [others => 0]
             ));
             -- Calculate expected parameter length:
             Param_Length : constant Parameter_Types.Parameter_Buffer_Length_Type := Param_Entry.End_Index - Param_Entry.Start_Index + 1;
@@ -269,7 +266,7 @@ package body Component.Parameters.Implementation is
       Param_Update : Parameter_Update.T := (
          Operation => Stage,
          Status => Success,
-         Param => (Header => (Id => Param_Entry.Id, Buffer_Length => Param_Length), Buffer => (others => 0)
+         Param => (Header => (Id => Param_Entry.Id, Buffer_Length => Param_Length), Buffer => [others => 0]
       ));
       -- Component index:
       Idx : constant Parameter_Update_T_Provide_Index := Parameter_Update_T_Provide_Index (Param_Entry.Component_Id);
@@ -293,6 +290,34 @@ package body Component.Parameters.Implementation is
       return Param_Update.Status;
    end Stage_Parameter;
 
+   -- Helper function to send a validation for a single components parameters:
+   function Validate_Parameters (Self : in out Instance; Component_Id : in Connector_Types.Connector_Index_Type) return Parameter_Enums.Parameter_Update_Status.E is
+      use Parameter_Enums.Parameter_Update_Status;
+      use Parameter_Enums.Parameter_Operation_Type;
+      -- Create a parameter update record:
+      Param_Validate : Parameter_Update.T := (
+         Operation => Validate,
+         Status => Success,
+         Param => (Header => (Id => 0, Buffer_Length => 0), Buffer => [others => 0]
+      ));
+      -- Component index:
+      Idx : constant Parameter_Update_T_Provide_Index := Parameter_Update_T_Provide_Index (Component_Id);
+   begin
+      -- Send the parameter fetch request to the appropriate component:
+      Self.Parameter_Update_T_Provide (Idx, Param_Validate);
+
+      -- Make sure the status is successful. If it is not, then produce an event.
+      if Param_Validate.Status /= Success then
+         Self.Event_T_Send_If_Connected (Self.Events.Parameter_Validation_Failed (Self.Sys_Time_T_Get, (
+            Operation => Param_Validate.Operation,
+            Status => Param_Validate.Status,
+            Id => Param_Validate.Param.Header.Id)
+         ));
+      end if;
+
+      return Param_Validate.Status;
+   end Validate_Parameters;
+
    -- Helper function to send an update for a single components parameters:
    function Update_Parameters (Self : in out Instance; Component_Id : in Connector_Types.Connector_Index_Type) return Parameter_Enums.Parameter_Update_Status.E is
       use Parameter_Enums.Parameter_Update_Status;
@@ -301,7 +326,7 @@ package body Component.Parameters.Implementation is
       Param_Update : Parameter_Update.T := (
          Operation => Update,
          Status => Success,
-         Param => (Header => (Id => 0, Buffer_Length => 0), Buffer => (others => 0)
+         Param => (Header => (Id => 0, Buffer_Length => 0), Buffer => [others => 0]
       ));
       -- Component index:
       Idx : constant Parameter_Update_T_Provide_Index := Parameter_Update_T_Provide_Index (Component_Id);
@@ -321,28 +346,15 @@ package body Component.Parameters.Implementation is
       return Param_Update.Status;
    end Update_Parameters;
 
-   -- Helper function to update all connected component's parameter tables from data within a provided memory region.
-   function Update_Parameter_Table (Self : in out Instance; Region : in Memory_Region.T) return Parameters_Memory_Region_Release.T is
+   -- Helper function to stage all connected component's parameter tables from data within a provided memory region.
+   function Stage_Parameter_Table (Self : in out Instance; Region : in Memory_Region.T) return Parameter_Enums.Parameter_Table_Update_Status.E is
       use Parameter_Enums.Parameter_Update_Status;
       use Parameter_Enums.Parameter_Table_Update_Status;
       Status_To_Return : Parameter_Enums.Parameter_Table_Update_Status.E := Success;
       Memory_Region_Ptr : constant Byte_Array_Pointer.Instance := Byte_Array_Pointer.Packed.Unpack (Region);
       Parameter_Data_Ptr : constant Byte_Array_Pointer.Instance
          := Byte_Array_Pointer.Slice (Memory_Region_Ptr, Start_Index => Parameter_Table_Header.Size_In_Bytes);
-
-      -- If the status returned is not success then set our status to return to a parameter error.
-      procedure Set_Status (Stat : in Parameter_Enums.Parameter_Update_Status.E) is
-      begin
-         -- Check the return status. Even if it is bad, we still continue to try to stage
-         -- the rest of the parameters.
-         if Stat /= Success then
-            Status_To_Return := Parameter_Error;
-         end if;
-      end Set_Status;
    begin
-      -- Send info event:
-      Self.Event_T_Send_If_Connected (Self.Events.Starting_Parameter_Table_Update (Self.Sys_Time_T_Get, Region));
-
       -- Go through all our entries linearly, extracting data from the incoming memory region, and
       -- using the values stored there as values to stage our parameters.
       for Param_Entry of Self.Entries.all loop
@@ -357,22 +369,75 @@ package body Component.Parameters.Implementation is
                End_Index => Param_Entry.End_Index
             );
             -- Create a temporary buffer to hold the parameter value:
-            Value : Parameter_Types.Parameter_Buffer_Type := (others => 0);
+            Value : Parameter_Types.Parameter_Buffer_Type := [others => 0];
          begin
             -- Copy the bytes from the pointer into a temporary buffer that is the maximum
             -- size of a parameter buffer:
             Value (Value'First .. Value'First + Param_Length - 1) := To_Byte_Array (Ptr);
 
             -- Stage the parameter:
-            Set_Status (Self.Stage_Parameter (Param_Entry => Param_Entry, Value => Value));
+            if Self.Stage_Parameter (Param_Entry => Param_Entry, Value => Value) /= Success then
+               Status_To_Return := Parameter_Error;
+            end if;
          end;
       end loop;
+      return Status_To_Return;
+   end Stage_Parameter_Table;
+
+   -- Helper function to update all connected component's parameter tables from data within a provided memory region.
+   function Validate_Parameter_Table (Self : in out Instance; Region : in Memory_Region.T) return Parameters_Memory_Region_Release.T is
+      use Parameter_Enums.Parameter_Update_Status;
+      use Parameter_Enums.Parameter_Table_Update_Status;
+      Status_To_Return : Parameter_Enums.Parameter_Table_Update_Status.E := Success;
+   begin
+      -- Send info event:
+      Self.Event_T_Send_If_Connected (Self.Events.Starting_Parameter_Table_Validate (Self.Sys_Time_T_Get, Region));
+
+      -- Stage all of the parameters:
+      Status_To_Return := Self.Stage_Parameter_Table (Region);
+
+      -- OK, now we need to validate all the parameters.
+      for Idx in Self.Connector_Parameter_Update_T_Provide'Range loop
+         if Self.Validate_Parameters (Component_Id => Idx) /= Success then
+            Status_To_Return := Parameter_Error;
+         end if;
+      end loop;
+
+      -- Send info event:
+      Self.Event_T_Send_If_Connected (Self.Events.Finished_Parameter_Table_Validate (Self.Sys_Time_T_Get, (
+         Region => Region,
+         Status => Status_To_Return)
+      ));
+
+      -- Return the memory pointer with the status for deallocation.
+      return (Region => Region, Status => Status_To_Return);
+   end Validate_Parameter_Table;
+
+   -- Helper function to update all connected component's parameter tables from data within a provided memory region.
+   function Update_Parameter_Table (Self : in out Instance; Region : in Memory_Region.T) return Parameters_Memory_Region_Release.T is
+      use Parameter_Enums.Parameter_Update_Status;
+      use Parameter_Enums.Parameter_Table_Update_Status;
+      Status_To_Return : Parameter_Enums.Parameter_Table_Update_Status.E := Success;
+
+      -- If the status returned is not success then set our status to return to a parameter error.
+      procedure Set_Status (Stat : in Parameter_Enums.Parameter_Update_Status.E) is
+      begin
+         -- Check the return status. Even if it is bad, we still continue to try to stage
+         -- the rest of the parameters.
+         if Stat /= Success then
+            Status_To_Return := Parameter_Error;
+         end if;
+      end Set_Status;
+   begin
+      -- Send info event:
+      Self.Event_T_Send_If_Connected (Self.Events.Starting_Parameter_Table_Update (Self.Sys_Time_T_Get, Region));
+
+      -- Stage all of the parameters:
+      Status_To_Return := Self.Stage_Parameter_Table (Region);
 
       -- OK, now we need to update all the parameters.
       for Idx in Self.Connector_Parameter_Update_T_Provide'Range loop
-         if Self.Is_Parameter_Update_T_Provide_Connected (Idx) then
-            Set_Status (Self.Update_Parameters (Component_Id => Idx));
-         end if;
+         Set_Status (Self.Update_Parameters (Component_Id => Idx));
       end loop;
 
       -- Send out a new parameter's packet if configured to do so:
@@ -418,7 +483,7 @@ package body Component.Parameters.Implementation is
          case Arg.Operation is
             -- The memory region contains a fresh parameter table. We need to use this parameter table to
             -- update all the active parameters.
-            when Set =>
+            when Set .. Validate =>
                -- First check the CRC:
                declare
                   use Byte_Array_Pointer;
@@ -431,21 +496,30 @@ package body Component.Parameters.Implementation is
                   -- Compute the CRC over the incoming table:
                   Computed_Crc : constant Crc_16.Crc_16_Type := Self.Crc_Parameter_Table (To_Byte_Array (Ptr));
                begin
-                  -- If the CRCs match, then update the downstream components' internal parameters:
+                  -- If the CRCs match, then continue updating or validating the downstream components'
+                  -- internal parameters:
                   if Table_Header.Crc_Table = Computed_Crc then
-                     -- Save off crc and version:
-                     Self.Table_Version := Table_Header.Version;
-                     Self.Stored_Crc := Table_Header.Crc_Table;
-                     -- Update the parameter table:
-                     To_Return := Self.Update_Parameter_Table (Arg.Region);
+                     case Arg.Operation is
+                        when Set =>
+                           -- Save off crc and version:
+                           Self.Table_Version := Table_Header.Version;
+                           Self.Stored_Crc := Table_Header.Crc_Table;
+                           -- Update the parameter table:
+                           To_Return := Self.Update_Parameter_Table (Arg.Region);
+                        when Validate =>
+                           -- Validate the parameter table:
+                           To_Return := Self.Validate_Parameter_Table (Arg.Region);
+                        when others =>
+                           -- There are no other cases in this range, this should be unreachable:
+                           pragma Assert (False);
+                     end case;
                   else
-                     -- If the CRCs do not match then throw an event and do NOT update the downstream components'
-                     -- internal parameters:
+                     -- If the CRCs do not match then throw an event and do NOT update or validate the
+                     -- downstream components' internal parameters:
                      Self.Event_T_Send_If_Connected (Self.Events.Memory_Region_Crc_Invalid (Self.Sys_Time_T_Get, (Parameters_Region => Arg, Header => Table_Header, Computed_Crc => Computed_Crc)));
                      To_Return := (Region => Arg.Region, Status => Crc_Error);
                   end if;
                end;
-               -- The memory region needs to be filled by the current values of all our active parameters:
             when Get =>
                To_Return := Self.Copy_Parameter_Table_To_Region (Arg.Region);
          end case;

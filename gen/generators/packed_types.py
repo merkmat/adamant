@@ -13,6 +13,7 @@ record_templates = [
     "record/name-validation.adb",
     "record/name-assertion.ads",
     "record/name-assertion.adb",
+    "record/name-c.ads",
     "record/name.py",
     "record/name_type_ranges.adb",
 ]
@@ -25,6 +26,7 @@ array_templates = [
     "array/name-validation.ads",
     "array/name-validation.adb",
     "array/name-assertion.ads",
+    "array/name-c.ads",
     "array/name.py",
     "array/name_type_ranges.adb",
 ]
@@ -89,9 +91,11 @@ class array_tex(doc_generator, generator_base):
         )
 
 
-# Special enum generator for matlab that splits the output into multiple files, one per class
-# as required by matlab.
 class enum_m_generator(basic_generator, generator_base):
+    """
+    Special enum generator for matlab that splits the output into multiple files, one per class
+    as required by matlab.
+    """
     def __init__(self):
         basic_generator.__init__(
             self,

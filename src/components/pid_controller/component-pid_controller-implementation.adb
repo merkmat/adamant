@@ -70,7 +70,7 @@ package body Component.Pid_Controller.Implementation is
       end if;
 
       -- Set the packet data to a clean packet
-      Self.Diagnostic_Packet := (Header => (Time => (0, 0), Id => Self.Packets.Get_Pid_Controller_Diagnostic_Packet_Id, Sequence_Count => 0, Buffer_Length => 0), Buffer => (others => 0));
+      Self.Diagnostic_Packet := (Header => (Time => (0, 0), Id => Self.Packets.Get_Pid_Controller_Diagnostic_Packet_Id, Sequence_Count => 0, Buffer_Length => 0), Buffer => [others => 0]);
 
    end Init;
 
@@ -100,7 +100,7 @@ package body Component.Pid_Controller.Implementation is
       --
       declare
          -- Pull out the timestamp from the input data for ease of use:
-         Timestamp : Sys_Time.T renames Arg.Time;
+         Timestamp : constant Sys_Time.T := Sys_Time.Pack (Arg.Time);
          -- Create locals for the statistics
          Mean_Error : Short_Float := 0.0;
          Variance_Error : Short_Float := 0.0;
@@ -127,7 +127,7 @@ package body Component.Pid_Controller.Implementation is
          Pid_Control_Output := Pid_Proportional_Output + Pid_Integral_Output + Pid_Derivative_Output + Arg.Feed_Forward_Value;
 
          -- Output the control
-         Self.Control_Output_U_Send_If_Connected ((Time => Timestamp, Output_Value => Pid_Control_Output, Error => Pid_Control_Error));
+         Self.Control_Output_U_Send_If_Connected ((Time => Arg.Time, Output_Value => Pid_Control_Output, Error => Pid_Control_Error));
 
          -- Update the previous values here
          Self.Control_Error_Prev := Pid_Control_Error;
@@ -147,7 +147,7 @@ package body Component.Pid_Controller.Implementation is
             Self.Data_Product_T_Send (Self.Data_Products.D_Output (Timestamp, ((Value => Pid_Derivative_Output))));
             Self.Data_Product_T_Send (Self.Data_Products.Ff_Output (Timestamp, ((Value => Arg.Feed_Forward_Value))));
 
-            -- Finish filling in the statistcs
+            -- Finish filling in the statistics
             Self.Data_Product_T_Send (Self.Data_Products.Pid_Error (Timestamp, ((Value => Pid_Control_Error))));
             Self.Data_Product_T_Send (Self.Data_Products.Pid_Error_Mean (Timestamp, ((Value => Mean_Error))));
             Self.Data_Product_T_Send (Self.Data_Products.Pid_Error_Variance (Timestamp, ((Value => Variance_Error))));

@@ -12,7 +12,7 @@ abstract project a_bareboard_debug extends all "a_bareboard_base.gpr" is
          -- -gnata - assertions are enabled
          ("-gnato", "-gnata") &
          -- Turn on ALL validity checking, not just that which is specified in the Ada Reference Manual.
-         -- This combined with Initialize_Scalars, below, greatly aids in discovering uninitializated 
+         -- This combined with Initialize_Scalars, below, greatly aids in discovering uninitializated
          -- variable bugs.
          ("-gnatVa");
 
@@ -20,9 +20,16 @@ abstract project a_bareboard_debug extends all "a_bareboard_base.gpr" is
          -- optimization
          ("-O0");
 
+      for Switches ("C++") use a_bareboard_base.Compiler'Switches ("C++") &
+         -- optimization
+         ("-O0");
+
       for Switches ("Asm_Cpp") use a_bareboard_base.Compiler'Switches ("Asm_Cpp") &
          -- optimization
          ("-O0");
    end Compiler;
+
+   -- Source files declared empty for abstract project
+   for Source_Files use ();
 
 end a_bareboard_debug;

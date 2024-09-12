@@ -86,6 +86,18 @@ class assembly_hydra_generator(assembly_generator):
             return "build" + os.sep + "hydra" + os.sep + self.extension
 
 
+class assembly_cosmos_plugin_generator_base(assembly_generator):
+    def __init__(self, template, template_dir=None, subdir=None):
+        assembly_generator.__init__(self, template=template, template_dir=template_dir)
+        self._subdir = subdir
+
+    def _get_default_build_dir(self):
+        if self._subdir:
+            return "build" + os.sep + "cosmos" + os.sep + self._subdir
+        else:
+            return "build" + os.sep + "cosmos" + os.sep + self.extension
+
+
 ####################################################
 # Assembly generators:
 ####################################################
@@ -115,11 +127,11 @@ class hydra_packet_pages_prc(assembly_hydra_generator, generator_base):
 # Hydra XML generator:
 ##############################################
 # Mapping from basic Ada types to format strings for Hydra.
-type_format_dictionary = {"Natural": "%d", "Integer": "%d", "Float": "%f"}
+type_format_dictionary = {"U": "%d", "I": "%d", "F": "%f"}
 
 
-# Function which produces a format string to print an Ada type:
 def create_type_print_strings(theAssembly):
+    """Function which produces a format string to print an Ada type."""
     for name, model in theAssembly.complex_types.items():
         string = ""
         model_type = type(model).__name__
@@ -136,7 +148,7 @@ def create_type_print_strings(theAssembly):
                     )
                 elif field.format:
                     try:
-                        string += type_format_dictionary[field.type]
+                        string += type_format_dictionary[field.format.type[0]]
                     except Exception:
                         string += "%d"
                 else:
@@ -153,9 +165,11 @@ def create_type_print_strings(theAssembly):
             assert False, "Cannot handle models of type: " + str(model_type)
 
 
-# Function which produces a type field string for all types
-# in the assembly mode.
 def create_type_field_strings(theAssembly):
+    """
+    Function which produces a type field string for all types
+    in the assembly mode.
+    """
     def form_field_strings(top_model, model, prefix=""):
         model_type = type(model).__name__
         if model_type in ["record", "array"]:
@@ -238,8 +252,8 @@ class assembly_view_dot(basic_generator, generator_base):
         a = v.apply(a)
         print(a.render(self.template))
 
-    # Depend on any commands, data products, events models that this component uses:
     def depends_on(self, input_filename):
+        """Depend on any commands, data products, events models that this component uses."""
         dirname, view_name, assembly_name, *ignore = self._split_input_filename(
             input_filename
         )
@@ -288,7 +302,7 @@ class assembly_flattened_packet_html(assembly_generator, generator_base):
 
                 # Search output for html dependencies and depend on them:
                 # output_filename = self.output_filename(input_filename)
-                # html.depend_on_html_links(output_filename, output)
+                # html_util.depend_on_html_links(output_filename, output)
                 # ^ There are no dependencies in these htmls so I am commenting
                 #  this out
 
@@ -302,10 +316,10 @@ class assembly_flattened_packet_html(assembly_generator, generator_base):
         # Depend only on links that are not in the flattened packet directory, since
         # those will be build manually (outside of redo). See below.
         from util import redo
-        from util import html
+        from util import html_util
 
         output_file = self.output_filename(input_filename)
-        html_links = html.get_html_links(output_file, output)
+        html_links = html_util.get_html_links(output_file, output)
         links_to_depend_on = [
             link
             for link in html_links

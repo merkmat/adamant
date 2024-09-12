@@ -4,15 +4,24 @@ abstract project a_bareboard_development extends all "a_bareboard_production.gpr
    -- for targets Debug and under
    package Compiler is
       -- Add preprocessor definitions and configuration pragma switches:
-      for Switches ("Ada") use a_bareboard_production.Compiler'Switches ("Ada") & 
+      for Switches ("Ada") use a_bareboard_production.Compiler'Switches ("Ada") &
          -- Turn on assertions and numeric overflow checking:
          -- -gnato - enable numeric overflow checking
          -- -gnata - assertions are enabled
          ("-gnato", "-gnata") &
          -- Turn on ALL validity checking, not just that which is specified in the Ada Reference Manual.
-         -- This combined with Initialize_Scalars, below, greatly aids in discovering uninitializated 
+         -- This combined with Initialize_Scalars, below, greatly aids in discovering uninitializated
          -- variable bugs.
          ("-gnatVa");
+
+      for Switches ("C") use a_bareboard_base.Compiler'Switches ("C");
+
+      for Switches ("C++") use a_bareboard_base.Compiler'Switches ("C++");
+
+      for Switches ("Asm_Cpp") use a_bareboard_base.Compiler'Switches ("Asm_Cpp");
    end Compiler;
+
+   -- Source files declared empty for abstract project
+   for Source_Files use ();
 
 end a_bareboard_development;

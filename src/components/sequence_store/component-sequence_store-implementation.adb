@@ -222,7 +222,7 @@ package body Component.Sequence_Store.Implementation is
             -- Create byte array to hold summaries. We know that this byte array will fit into a packet, since we checked at
             -- initialization.
             subtype Summary_Byte_Array is Basic_Types.Byte_Array (0 .. Packed_Slot_Summary.Size_In_Bytes * Self.Slots.all'Length - 1);
-            Summary_Bytes : Summary_Byte_Array := (others => 0);
+            Summary_Bytes : Summary_Byte_Array := [others => 0];
             Idx : Natural := Summary_Bytes'First;
          begin
             -- For each slot, grab the header and put relevant data into the
@@ -270,10 +270,9 @@ package body Component.Sequence_Store.Implementation is
    -- Check_Slots_At_Startup : Boolean - If True, then check the validity of the sequences in all slots by computing CRCs over them at startup.
    -- Dump_Slot_Summary_At_Startup : Boolean - If True, then the slot summaries will be dumped at startup.
    --
-   overriding procedure Init (Self : in out Instance; Sequence_Slots : in Sequence_Slot_Array_Access; Check_Slots_At_Startup : in Boolean; Dump_Slot_Summary_At_Startup : in Boolean) is
+   overriding procedure Init (Self : in out Instance; Sequence_Slots : in not null Sequence_Slot_Array_Access; Check_Slots_At_Startup : in Boolean; Dump_Slot_Summary_At_Startup : in Boolean) is
    begin
       -- Make sure the sequence slots exist:
-      pragma Assert (Sequence_Slots /= null, "The slot array must not be null.");
       pragma Assert (Sequence_Slots.all'First = 0, "Slots must be zero indexed. This is so there is no conflict with the ground.");
       pragma Assert (Sequence_Slots.all'Length >= 1, "There must be at least one slot.");
       pragma Assert (Sequence_Slots.all'Last >= 0, "There must be at least one slot.");
